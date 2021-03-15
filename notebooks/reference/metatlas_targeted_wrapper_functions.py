@@ -138,12 +138,13 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
         
     if(polarity=="POS"):
         exl=['NEG']
-        QC_template_filename = pos_templates[1]
+        #QC_template_filename = pos_templates[1]
     else:
         exl=['POS']
-        QC_template_filename = neg_templates[1]
-     
-    # SELECT GROUPS
+        #QC_template_filename = neg_templates[1]
+    
+    
+    ## SELECT GROUPS
     groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,remove_empty = True,include_list = ['QC'], exclude_list = exl)  
     groups = sorted(groups, key=operator.attrgetter('name'))
     
