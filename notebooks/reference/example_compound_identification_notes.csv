@@ -1,0 +1,20 @@
+﻿label,atlas,polarity,note
+"alanine (U - 13C, 15N)",ISTD,POS,Alanine is only in neg mode
+alanine (unlabeled),ISTD,POS,Alanine is only in neg mode
+"cystine (U - 13C, 15N)",ISTD,POS,Cysteine is in the internal standard mix but we can’t detect it
+cystine (unlabeled),ISTD,POS,Cysteine is in the internal standard mix but we can’t detect it
+"cystine (U - 13C, 15N)",ISTD,NEG,Cysteine is in the internal standard mix but we can’t detect it
+cystine (unlabeled),ISTD,NEG,Cysteine is in the internal standard mix but we can’t detect it
+threonine (unlabeled),ISTD,NEG,Threonine in unlabeled neg - will have later peaks for allothreonine and homoserine use msms to pick right one
+trehalose (U - 13C),ISTD,POS,Trehalose is best in neg; may be lots of isomer peaks - watch out for a peak 1 min earlier that’s not it
+trehalose (unlabeled),ISTD,POS,Trehalose is best in neg; may be lots of isomer peaks - watch out for a peak 1 min earlier that’s not it
+trehalose (U - 13C),ISTD,NEG,Trehalose is best in neg; may be lots of isomer peaks - watch out for a peak 1 min earlier that’s not it
+trehalose (unlabeled),ISTD,NEG,Trehalose is best in neg; may be lots of isomer peaks - watch out for a peak 1 min earlier that’s not it
+"glycine (U - 13C, 15N)",ISTD,POS,"Glycine is better in neg, low intensity/spiky in pos"
+glycine (unlabeled),ISTD,POS,"Glycine is better in neg, low intensity/spiky in pos"
+adenine (U - 15N),ISTD,NEG,Adenine will have a lot of peaks - choose best from RT and MSMS. others are fragments of other things with adenine in them
+adenine (unlabeled),ISTD,NEG,Adenine will have a lot of peaks - choose best from RT and MSMS. others are fragments of other things with adenine in them
+adenine (U - 15N),ISTD,POS,Adenine will have a lot of peaks - choose best from RT and MSMS. others are fragments of other things with adenine in them
+adenine (unlabeled),ISTD,POS,Adenine will have a lot of peaks - choose best from RT and MSMS. others are fragments of other things with adenine in them
+guanine (U - 15N),ISTD,POS,Labeled guanine was supposed to be in the mix but it didn't solubilize well so it's actually not there
+guanine (U - 15N),ISTD,NEG,Labeled guanine was supposed to be in the mix but it didn't solubilize well so it's actually not there
