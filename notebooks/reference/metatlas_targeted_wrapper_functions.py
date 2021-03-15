@@ -19,6 +19,16 @@ import matplotlib.pyplot as plot ## from RT -adjustor notebook: 'import matplotl
 import operator
 from importlib import reload
 
+## rt-adjust imports
+import itertools
+import math
+from matplotlib import gridspec
+import matplotlib.ticker as mticker
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.metrics import mean_absolute_error as mae
+
+
 from IPython.core.display import Markdown, display, clear_output, HTML
       
 
@@ -61,7 +71,7 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
     files = dp.get_metatlas_files(experiment = project_name,name = '%AK%',most_recent = True)
     df = metob.to_dataframe(files)
     my_grid = qgrid.QGridWidget(df=df[['experiment','name','username','acquisition_time']])
-    print(len(files)+" files found for this experiment")
+    print(str(len(files))+" files found for this experiment")
     
     controlled_vocab = ['QC','InjBl','ISTD'] #add _ to beginning. It will be stripped if at begining  SIG: should we add InjBL? what about extraction control and blanks?
     version_identifier = my_id
@@ -532,7 +542,7 @@ def get_msms_hits(metatlas_dataset,my_atlas,output_dir,ref_loc='/global/project/
         hits=dp.get_msms_hits(metatlas_dataset,extra_time=True,keep_nonmatches=True,frag_mz_tolerance=.01, ref_loc = ref_loc)
         pickle.dump(hits, open(hits_file, "wb"))
         print(time.time() - t0)
-        print('%s%s' % (len(hits),' <- total number of MSMS spectra found in your files'))
+        print('%s%s' % (str(len(hits)),' <- total number of MSMS spectra found in your files'))
         
     return(hits)
 
