@@ -18,3 +18,11 @@ adenine (U - 15N),ISTD,POS,Adenine will have a lot of peaks - choose best from R
 adenine (unlabeled),ISTD,POS,Adenine will have a lot of peaks - choose best from RT and MSMS. others are fragments of other things with adenine in them
 guanine (U - 15N),ISTD,POS,Labeled guanine was supposed to be in the mix but it didn't solubilize well so it's actually not there
 guanine (U - 15N),ISTD,NEG,Labeled guanine was supposed to be in the mix but it didn't solubilize well so it's actually not there
+"thymine (U - 13C, 15N)",ISTD,POS,Thiamine RT shifts a lot - not unusual to detect far from predicted RT
+ABSCISIC ACID,EMA,POS,make sure two abscisic acid entries in EMA with different adducts have same RT bounds
+5'-deoxyadenosine,EMA,POS,peaks will show up for 5'- and  2' -deoxyadenosine and  but 5' is earlier than 2'
+2'-deoxyadenosine,EMA,POS,peaks will show up for 5'- and  2' -deoxyadenosine and  but 5' is earlier than 2'
+bis(3-aminopropyl)amine,EMA,POS,remove - Not important and possibly mis-identified when standards run
+bis(3-aminopropyl)amine,EMA,NEG,remove - Not important and possibly mis-identified when standards run
+adenosine 5'-monophosphate,EMA,POS,go for peak with closest RT
+adenosine 5'-monophosphate,EMA,NEG,go for peak with closest RT

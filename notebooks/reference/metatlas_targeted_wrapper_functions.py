@@ -73,92 +73,98 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
     my_grid = qgrid.QGridWidget(df=df[['experiment','name','username','acquisition_time']])
     print(str(len(files))+" files found for this experiment")
     
-    controlled_vocab = ['QC','InjBl','ISTD'] #add _ to beginning. It will be stripped if at begining  SIG: should we add InjBL? what about extraction control and blanks?
-    version_identifier = my_id
-    file_dict = {}
-    groups_dict = {}
-    for f in files:
-        k = f.name.split('.')[0]
-        #     get index if any controlled vocab in filename
-        indices = [i for i, s in enumerate(controlled_vocab) if s.lower() in k.lower()]
-        prefix = '_'.join(k.split('_')[:11])
-        if len(indices)>0:
-            short_name = controlled_vocab[indices[0]].lstrip('_')
-            group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
-            short_name = k.split('_')[9]+'_'+short_name # Prepending POL to short_name
-        else:
-            short_name = k.split('_')[12]
-            group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
-            short_name = k.split('_')[9]+'_'+k.split('_')[12]  # Prepending POL to short_name
-        file_dict[k] = {'file':f,'group':group_name,'short_name':short_name}
-        groups_dict[group_name] = {'items':[],'name':group_name,'short_name':short_name}
-    df = pd.DataFrame(file_dict).T
-    df.index.name = 'filename'
-    df.reset_index(inplace=True)#['group'].unique()
-    df.drop(columns=['file'],inplace=True)
-    for ug in groups_dict.keys():
-        for file_key,file_value in file_dict.items():
-            if file_value['group'] == ug:
-                groups_dict[ug]['items'].append(file_value['file'])
+    #STEP 2: MAKE GROUPS (only if no QC groups can be found in the db for this project already)
+    if(polarity=="POS"):
+        exl=['NEG']
+    else:
+        exl=['POS']
 
-    #STEP 2: MAKE GROUPS
-    groups = []
-    for group_key,group_values in groups_dict.items():
-        g = metob.Group(name=group_key,items=group_values['items'],short_name=group_values['short_name'])
-        groups.append(g)        
-        for item in g.items:
-            print(g.name,g.short_name,item.name)
-        print('')
-        
-    # STEP 3 STORE GROUPS
-    metob.store(groups)
+    groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,do_print=False,
+                                           remove_empty = True,include_list = ['QC'], exclude_list = exl)
+    if len(groups)==0:
+        print("Creating groups")
+     
+        controlled_vocab = ['QC','InjBl','ISTD'] #add _ to beginning. It will be stripped if at begining  SIG: should we add InjBL? what about extraction control and blanks?
+        version_identifier = my_id
+        file_dict = {}
+        groups_dict = {}
+        for f in files:
+            k = f.name.split('.')[0]
+            #     get index if any controlled vocab in filename
+            indices = [i for i, s in enumerate(controlled_vocab) if s.lower() in k.lower()]
+            prefix = '_'.join(k.split('_')[:11])
+            if len(indices)>0:
+                short_name = controlled_vocab[indices[0]].lstrip('_')
+                group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
+                short_name = k.split('_')[9]+'_'+short_name # Prepending POL to short_name
+            else:
+                short_name = k.split('_')[12]
+                group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
+                short_name = k.split('_')[9]+'_'+k.split('_')[12]  # Prepending POL to short_name
+            file_dict[k] = {'file':f,'group':group_name,'short_name':short_name}
+            groups_dict[group_name] = {'items':[],'name':group_name,'short_name':short_name}
+        df = pd.DataFrame(file_dict).T
+        df.index.name = 'filename'
+        df.reset_index(inplace=True)#['group'].unique()
+        df.drop(columns=['file'],inplace=True)
+        for ug in groups_dict.keys():
+            for file_key,file_value in file_dict.items():
+                if file_value['group'] == ug:
+                    groups_dict[ug]['items'].append(file_value['file'])
+        groups = []
+        for group_key,group_values in groups_dict.items():
+            g = metob.Group(name=group_key,items=group_values['items'],short_name=group_values['short_name'])
+            groups.append(g)        
+            for item in g.items:
+                print(g.name,g.short_name,item.name)
+            print('')       
+        # STEP 3 STORE GROUPS
+        metob.store(groups)
+    else:
+        print("Using previously created groups")
     
-    # STEP 4. MAKE SHORTNAMES
-    # Make short_filename and short_samplename 
-    short_filename_delim_ids = [0,2,4,5,7,9,14]
-    short_samplename_delim_ids = [9,12,13,14]
-    short_names_df = pd.DataFrame(columns=['sample_treatment','short_filename','short_samplename'])
-    ctr = 0
-    for f in files:
-        short_filename = []
-        short_samplename = []
-        tokens = f.name.split('.')[0].split('_')
-        for id in short_filename_delim_ids:
-            short_filename.append(str(tokens[id]))
-        for id in short_samplename_delim_ids:
-            short_samplename.append(str(tokens[id]))
-        short_filename = "_".join(short_filename)
-        short_samplename = "_".join(short_samplename)
-        short_names_df.loc[ctr, 'full_filename'] = f.name.split('.')[0]
-        short_names_df.loc[ctr, 'sample_treatment'] = str(tokens[12]) # delim 12
-        short_names_df.loc[ctr, 'short_filename'] = short_filename
-        short_names_df.loc[ctr, 'short_samplename'] = short_samplename
-        short_names_df.loc[ctr, 'last_modified'] = pd.to_datetime(f.last_modified,unit='s')
-        ctr +=1
-    short_names_df.sort_values(by='last_modified', inplace=True)
-    short_names_df.drop(columns=['last_modified'], inplace=True)
-    short_names_df.drop_duplicates(subset=['full_filename'], keep='last', inplace=True)
-    short_names_df.set_index('full_filename', inplace=True)
-    short_names_df.to_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index=True)
+    # STEP 4. MAKE SHORTNAMES (only if not already found as a saved csv)
+    if os.path.exists(os.path.join(os.path.dirname(output_dir), 'short_names.csv')):
+        short_names_df = pd.read_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index_col='full_filename')
+    else:
+        # Make short_filename and short_samplename 
+        short_filename_delim_ids = [0,2,4,5,7,9,14]
+        short_samplename_delim_ids = [9,12,13,14]
+        short_names_df = pd.DataFrame(columns=['sample_treatment','short_filename','short_samplename'])
+        ctr = 0
+        for f in files:
+            short_filename = []
+            short_samplename = []
+            tokens = f.name.split('.')[0].split('_')
+            for id in short_filename_delim_ids:
+                short_filename.append(str(tokens[id]))
+            for id in short_samplename_delim_ids:
+                short_samplename.append(str(tokens[id]))
+            short_filename = "_".join(short_filename)
+            short_samplename = "_".join(short_samplename)
+            short_names_df.loc[ctr, 'full_filename'] = f.name.split('.')[0]
+            short_names_df.loc[ctr, 'sample_treatment'] = str(tokens[12]) # delim 12
+            short_names_df.loc[ctr, 'short_filename'] = short_filename
+            short_names_df.loc[ctr, 'short_samplename'] = short_samplename
+            short_names_df.loc[ctr, 'last_modified'] = pd.to_datetime(f.last_modified,unit='s')
+            ctr +=1
+        short_names_df.sort_values(by='last_modified', inplace=True)
+        short_names_df.drop(columns=['last_modified'], inplace=True)
+        short_names_df.drop_duplicates(subset=['full_filename'], keep='last', inplace=True)
+        short_names_df.set_index('full_filename', inplace=True)
+        short_names_df.to_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index=True)
         
     # SETUP QC DIR
     output_data_qc = output_dir
     if not os.path.exists(output_data_qc):
         os.makedirs(output_data_qc)
-        
-    if(polarity=="POS"):
-        exl=['NEG']
-        #QC_template_filename = pos_templates[1]
-    else:
-        exl=['POS']
-        #QC_template_filename = neg_templates[1]
-    
+           
     
     ## SELECT GROUPS
     groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,remove_empty = True,include_list = ['QC'], exclude_list = exl)  
     groups = sorted(groups, key=operator.attrgetter('name'))
     
-    # FING CORRESPONDING FILES
+    # FIND CORRESPONDING FILES
     file_df = pd.DataFrame(columns=['file','time','group'])
     for g in groups:
         for f in g.items:
@@ -179,16 +185,17 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
     for i,a in enumerate(atlases):
         print(i,a.name,pd.to_datetime(a.last_modified,unit='s'),len(a.compound_identifications))
     print("choosing the most recent atlas:")
-    myAtlas = atlases[-1]
-    atlas_df = ma_data.make_atlas_df(myAtlas)
-    atlas_df['label'] = [cid.name for cid in myAtlas.compound_identifications]
-    print(myAtlas.name)
+    my_atlas = atlases[-1]
+    atlas_df = ma_data.make_atlas_df(my_atlas)
+    atlas_df['label'] = [cid.name for cid in my_atlas.compound_identifications]
+    print(my_atlas.name)
     
     # CREATE METATLAS DATASET FROM FILES AND ATLAS
     print("creating metatlas dataset...")
+    
     all_files = []
     for file_data in file_df.iterrows():
-        all_files.append((file_data[1].file,file_data[1].group,atlas_df,myAtlas))
+        all_files.append((file_data[1].file,file_data[1].group,atlas_df,my_atlas))
     pool = mp.Pool(processes=min(4, len(all_files)))
     t0 = time.time()
     metatlas_dataset = pool.map(ma_data.get_data_for_atlas_df_and_file, all_files)
@@ -230,7 +237,7 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
     for i,a in enumerate(rts_df.columns):
         print(i, a)
     
-    return rts_df, atlas_df, myAtlas
+    return rts_df, my_atlas, groups
 
 class RT_model:
     def __init__(self, name, coef, intercept):
@@ -238,7 +245,10 @@ class RT_model:
         self.coef = coef
         self.intercept=intercept
     
-def create_rt_adjustment_model(selected_column,rts_df,atlas_df):
+def create_rt_adjustment_model(selected_column,rts_df,my_atlas,groups,output_dir):
+    atlas_df = ma_data.make_atlas_df(my_atlas)
+    atlas_df['label'] = [cid.name for cid in my_atlas.compound_identifications]
+    
     actual_rts, pred_rts, polyfit_rts = [],[],[]
 
     current_actual_df = rts_df.loc[:,rts_df.columns[selected_column]]
@@ -297,6 +307,7 @@ def create_rt_adjustment_model(selected_column,rts_df,atlas_df):
     for i in range(rts_df.shape[1]-5):
         fig_legend = fig_legend+"\n"+str(i)+"        "+rts_df.columns[i]
 
+    output_data_qc = output_dir
     fig.tight_layout(pad=0.5)
     plot.text(0,-0.03*rts_df.shape[1], fig_legend, transform=plot.gcf().transFigure)
     plot.savefig(os.path.join(output_data_qc, 'Actual_vs_Predicted_RTs.pdf'), bbox_inches="tight")
@@ -315,33 +326,30 @@ def create_rt_adjustment_model(selected_column,rts_df,atlas_df):
     qc_df['RT Diff Polynomial'] = qc_df['RT Measured'] - qc_df['RT Polynomial Pred']
     qc_df.to_csv(os.path.join(output_data_qc, "RT_Predicted_Model_Comparison.csv"))
     
-    output_data_qc = os.path.join(output_dir,"data_qc")
     with open(os.path.join(output_data_qc,'rt_model_linear.txt'), 'w') as f:
         f.write('coef = {}\nintercept = {}\nqc_actual_rts = {}\nqc_predicted_rts = {}'.format(coef_linear, 
                                                                 intercept_linear, 
                                                                 ', '.join([g.name for g in groups]),
-                                                                myAtlas.name))
+                                                                my_atlas.name))
         f.write('\n'+repr(rt_model_linear.set_params()))
         
     with open(os.path.join(output_data_qc,'rt_model_poly.txt'), 'w') as f:
         f.write('coef = {}\nintercept = {}\nqc_actual_rts = {}\nqc_predicted_rts = {}'.format(coef_poly, 
                                                                 intercept_poly, 
                                                                 ', '.join([g.name for g in groups]),
-                                                                myAtlas.name))
+                                                                my_atlas.name))
         f.write('\n'+repr(rt_model_poly.set_params()))
 
     
-    print(qc_df)
-    
     model_linear = RT_model("linear",coef_linear,intercept_linear)
     model_poly = RT_model("poly",coef_poly,intercept_poly)
-    return model_linear, model_poly
+    return model_linear, model_poly, qc_df
 
 def apply_rt_adjustment(model,project_name,my_id,output_dir,pos_atlas_indices = [0,4],neg_atlas_indices = [0,4],save_to_db = True):
     pp=project_name.split("_")
     free_text = my_id.replace("%","")+"_"+pp[0]+"_"+pp[2]+"_"+pp[3]+"_"+pp[4]+"_"+pp[5] # this will be appended to the end of the csv filename exported
     
-    output_data_qc = os.path.join(output_dir,"data_qc")
+    output_data_qc = output_dir
     
     # ATLAS TEMPLATES (alternatively, can be read from a file?)
     pos_templates = ['HILICz150_ANT20190824_TPL_EMA_Unlab_POS',
@@ -590,7 +598,7 @@ def remove_marked_compounds(metatlas_dataset,my_atlas,polarity,kept_string="kept
     print("# Compounds Kept: "+str(len(atlas_kept)))
     print("# Compounds Removed: "+str(len(atlas_removed)))
 
-    atlasfilename=my_atlas.name+kept_string  # <- enter the name of the atlas to be stored
+    atlasfilename=my_atlas.name+"_"+kept_string  # <- enter the name of the atlas to be stored
     if polarity=="POS":
         pol_string="positive"
     if polarity=="NEG":
