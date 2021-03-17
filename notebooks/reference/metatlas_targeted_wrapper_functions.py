@@ -73,86 +73,100 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
     my_grid = qgrid.QGridWidget(df=df[['experiment','name','username','acquisition_time']])
     print(str(len(files))+" files found for this experiment")
     
-    #STEP 2: MAKE GROUPS (only if no QC groups can be found in the db for this project already)
-    if(polarity=="POS"):
-        exl=['NEG']
-    else:
-        exl=['POS']
-
-    groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,do_print=False,
-                                           remove_empty = True,include_list = ['QC'], exclude_list = exl)
-    if len(groups)==0:
-        print("Creating groups")
+    #STEP 2: MAKE GROUPS 
      
-        controlled_vocab = ['QC','InjBl','ISTD'] #add _ to beginning. It will be stripped if at begining  SIG: should we add InjBL? what about extraction control and blanks?
-        version_identifier = my_id
-        file_dict = {}
-        groups_dict = {}
-        for f in files:
-            k = f.name.split('.')[0]
-            #     get index if any controlled vocab in filename
-            indices = [i for i, s in enumerate(controlled_vocab) if s.lower() in k.lower()]
-            prefix = '_'.join(k.split('_')[:11])
-            if len(indices)>0:
-                short_name = controlled_vocab[indices[0]].lstrip('_')
-                group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
-                short_name = k.split('_')[9]+'_'+short_name # Prepending POL to short_name
-            else:
-                short_name = k.split('_')[12]
-                group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
-                short_name = k.split('_')[9]+'_'+k.split('_')[12]  # Prepending POL to short_name
-            file_dict[k] = {'file':f,'group':group_name,'short_name':short_name}
-            groups_dict[group_name] = {'items':[],'name':group_name,'short_name':short_name}
-        df = pd.DataFrame(file_dict).T
-        df.index.name = 'filename'
-        df.reset_index(inplace=True)#['group'].unique()
-        df.drop(columns=['file'],inplace=True)
-        for ug in groups_dict.keys():
-            for file_key,file_value in file_dict.items():
-                if file_value['group'] == ug:
-                    groups_dict[ug]['items'].append(file_value['file'])
-        groups = []
-        for group_key,group_values in groups_dict.items():
-            g = metob.Group(name=group_key,items=group_values['items'],short_name=group_values['short_name'])
-            groups.append(g)        
-            for item in g.items:
-                print(g.name,g.short_name,item.name)
-            print('')       
-        # STEP 3 STORE GROUPS
+    controlled_vocab = ['QC','InjBl','ISTD'] #add _ to beginning. It will be stripped if at begining  SIG: should we add InjBL? 
+    version_identifier = my_id
+    file_dict = {}
+    groups_dict = {}
+    for f in files:
+        k = f.name.split('.')[0]
+        #     get index if any controlled vocab in filename
+        indices = [i for i, s in enumerate(controlled_vocab) if s.lower() in k.lower()]
+        prefix = '_'.join(k.split('_')[:11])
+        if len(indices)>0:
+            short_name = controlled_vocab[indices[0]].lstrip('_')
+            group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
+            short_name = k.split('_')[9]+'_'+short_name # Prepending POL to short_name
+        else:
+            short_name = k.split('_')[12]
+            group_name = '%s_%s_%s'%(prefix,version_identifier,short_name)
+            short_name = k.split('_')[9]+'_'+k.split('_')[12]  # Prepending POL to short_name
+        file_dict[k] = {'file':f,'group':group_name,'short_name':short_name}
+        groups_dict[group_name] = {'items':[],'name':group_name,'short_name':short_name}
+    df = pd.DataFrame(file_dict).T
+    df.index.name = 'filename'
+    df.reset_index(inplace=True)#['group'].unique()
+    df.drop(columns=['file'],inplace=True)
+    for ug in groups_dict.keys():
+        for file_key,file_value in file_dict.items():
+            if file_value['group'] == ug:
+                groups_dict[ug]['items'].append(file_value['file'])
+    #df is now a dataframe of files with the long group name and the short group name each belongs to - let user check this before proceeding?
+        
+    groups = []
+    for group_key,group_values in groups_dict.items():
+        g = metob.Group(name=group_key,items=group_values['items'],short_name=group_values['short_name'])
+        groups.append(g)        
+    
+    # STEP 3 STORE GROUPS (only if they don't already exist, with the same exact files in each group)
+    existing_groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,
+                                               do_print=False,remove_empty = True)
+    store_groups=False
+    if(len(existing_groups))==0:
+        store_groups=True
+    else:
+        dict_existing ={}
+        for g in existing_groups:
+            for i in g.items:
+                dict_existing[i.name] = g.short_name
+
+        dict_new ={}
+        for g in groups:
+            for i in g.items:
+                dict_new[i.name] = g.short_name
+        
+        if not(dict_existing==dict_new):
+            store_groups=True
+    if store_groups:
+        print("storing new groups")
+        for g in groups:
+            print(g.short_name)
+            for i in g.items:
+                print(".   "+i.name)
         metob.store(groups)
     else:
-        print("Using previously created groups")
-    
-    # STEP 4. MAKE SHORTNAMES (only if not already found as a saved csv)
-    if os.path.exists(os.path.join(os.path.dirname(output_dir), 'short_names.csv')):
-        short_names_df = pd.read_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index_col='full_filename')
-    else:
-        # Make short_filename and short_samplename 
-        short_filename_delim_ids = [0,2,4,5,7,9,14]
-        short_samplename_delim_ids = [9,12,13,14]
-        short_names_df = pd.DataFrame(columns=['sample_treatment','short_filename','short_samplename'])
-        ctr = 0
-        for f in files:
-            short_filename = []
-            short_samplename = []
-            tokens = f.name.split('.')[0].split('_')
-            for id in short_filename_delim_ids:
-                short_filename.append(str(tokens[id]))
-            for id in short_samplename_delim_ids:
-                short_samplename.append(str(tokens[id]))
-            short_filename = "_".join(short_filename)
-            short_samplename = "_".join(short_samplename)
-            short_names_df.loc[ctr, 'full_filename'] = f.name.split('.')[0]
-            short_names_df.loc[ctr, 'sample_treatment'] = str(tokens[12]) # delim 12
-            short_names_df.loc[ctr, 'short_filename'] = short_filename
-            short_names_df.loc[ctr, 'short_samplename'] = short_samplename
-            short_names_df.loc[ctr, 'last_modified'] = pd.to_datetime(f.last_modified,unit='s')
-            ctr +=1
-        short_names_df.sort_values(by='last_modified', inplace=True)
-        short_names_df.drop(columns=['last_modified'], inplace=True)
-        short_names_df.drop_duplicates(subset=['full_filename'], keep='last', inplace=True)
-        short_names_df.set_index('full_filename', inplace=True)
-        short_names_df.to_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index=True)
+        print("using existing groups")
+            
+        
+
+    # STEP 4. MAKE SHORTNAMES 
+    # Make short_filename and short_samplename 
+    short_filename_delim_ids = [0,2,4,5,7,9,14]
+    short_samplename_delim_ids = [9,12,13,14]
+    short_names_df = pd.DataFrame(columns=['sample_treatment','short_filename','short_samplename'])
+    ctr = 0
+    for f in files:
+        short_filename = []
+        short_samplename = []
+        tokens = f.name.split('.')[0].split('_')
+        for id in short_filename_delim_ids:
+            short_filename.append(str(tokens[id]))
+        for id in short_samplename_delim_ids:
+            short_samplename.append(str(tokens[id]))
+        short_filename = "_".join(short_filename)
+        short_samplename = "_".join(short_samplename)
+        short_names_df.loc[ctr, 'full_filename'] = f.name.split('.')[0]
+        short_names_df.loc[ctr, 'sample_treatment'] = str(tokens[12]) # delim 12
+        short_names_df.loc[ctr, 'short_filename'] = short_filename
+        short_names_df.loc[ctr, 'short_samplename'] = short_samplename
+        short_names_df.loc[ctr, 'last_modified'] = pd.to_datetime(f.last_modified,unit='s')
+        ctr +=1
+    short_names_df.sort_values(by='last_modified', inplace=True)
+    short_names_df.drop(columns=['last_modified'], inplace=True)
+    short_names_df.drop_duplicates(subset=['full_filename'], keep='last', inplace=True)
+    short_names_df.set_index('full_filename', inplace=True)
+    short_names_df.to_csv(os.path.join(os.path.dirname(output_dir), 'short_names.csv'), sep=',', index=True)
         
     # SETUP QC DIR
     output_data_qc = output_dir
@@ -160,7 +174,12 @@ def setup_rt_adjustment(project_name,my_id,output_dir,polarity="POS",QC_template
         os.makedirs(output_data_qc)
            
     
-    ## SELECT GROUPS
+    ## SELECT QC GROUPS
+    if(polarity=="POS"):
+        exl=['NEG']
+    else:
+        exl=['POS']
+
     groups = dp.select_groups_for_analysis(name = project_name + my_id,most_recent = True,remove_empty = True,include_list = ['QC'], exclude_list = exl)  
     groups = sorted(groups, key=operator.attrgetter('name'))
     
