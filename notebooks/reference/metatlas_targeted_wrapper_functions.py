@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plot ## from RT -adjustor notebook: 'import matplotlib.pyplot as plt'
 import operator
 from importlib import reload
+import csv
 
 ## rt-adjust imports
 import itertools
@@ -606,6 +607,31 @@ def get_compound_notes(compound_ix, polarity, my_atlas, notes_file):
     print("*** Compound Notes: ***")
     notes=notes_df[(notes_df.label == clabel) & (notes_df.polarity == polarity)]
     return(notes)
+
+def get_identification_notes(my_atlas,output_dir,polarity):
+    notes_file=os.path.join(output_dir,polarity+"_identification_notes.csv")
+    if os.path.exists(notes_file):
+        notes_df=pd.read_csv(notes_file)
+    else:
+        atlas_df = ma_data.make_atlas_df(my_atlas)
+        atlas_df['label'] = [cid.name for cid in my_atlas.compound_identifications]
+        notes_df = atlas_df[['label','mz','adduct']]
+        notes_df['id_notes'] = "none"
+        notes_df['polarity'] = polarity
+        notes_df['orig_idx']=range(0, len(notes_df))
+        notes_df.to_csv(notes_file, index=False)
+    notes_df=notes_df.set_index(['label', 'adduct'])
+    return notes_df
+
+def save_identification_notes(notes_df,output_dir,polarity):
+    notes_file=os.path.join(output_dir,polarity+"_identification_notes.csv")
+    notes_df.to_csv(notes_file, index=True,quoting=csv.QUOTE_NONNUMERIC)
+
+def add_identification_note(compound_idx,note,notes_df,my_atlas):
+    compound_label=my_atlas.compound_identifications[compound_idx].name
+    compound_adduct=my_atlas.compound_identifications[compound_idx].mz_references[0].adduct
+    notes_df['id_notes'].loc[compound_label,compound_adduct]=note
+    return notes_df
   
 
 def remove_marked_compounds(metatlas_dataset,my_atlas,polarity,kept_string="kept"):
