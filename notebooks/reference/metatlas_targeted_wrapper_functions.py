@@ -608,7 +608,7 @@ def get_compound_notes(compound_ix, polarity, my_atlas, notes_file):
     notes=notes_df[(notes_df.label == clabel) & (notes_df.polarity == polarity)]
     return(notes)
 
-def get_identification_notes(my_atlas,output_dir,polarity):
+def get_identification_notes(my_atlas,ready_to_export,output_dir,polarity):
     notes_file=os.path.join(output_dir,polarity+"_identification_notes.csv")
     if os.path.exists(notes_file):
         notes_df=pd.read_csv(notes_file)
@@ -621,6 +621,14 @@ def get_identification_notes(my_atlas,output_dir,polarity):
         notes_df['orig_idx']=range(0, len(notes_df))
         notes_df.to_csv(notes_file, index=False)
     notes_df=notes_df.set_index(['label', 'adduct'])
+    if ready_to_export:
+        notes_df['final_idx']=-1
+        for cix,cid in enumerate(my_atlas.compound_identifications):
+            compound_label=cid.name
+            compound_adduct=cid.mz_references[0].adduct
+            notes_df['final_idx'].loc[compound_label,compound_adduct]=cix
+        save_identification_notes(notes_df,output_dir,polarity)
+        
     return notes_df
 
 def save_identification_notes(notes_df,output_dir,polarity):
