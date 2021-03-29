@@ -129,8 +129,6 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
         cid = metatlas_dataset[0][compound_idx]['identification']
         mz_theoretical = cid.mz_references[0].mz
         mz_measured = metatlas_dataset[0][compound_idx]['data']['ms1_summary']['mz_centroid']
-        delta_mz = abs(mz_theoretical - mz_measured)
-        delta_ppm = delta_mz / mz_theoretical * 1e6
 
         comp_msms_hits = msms_hits_df[(msms_hits_df['inchi_key'] == inchi_key) \
                                     & (msms_hits_df['msms_scan'] >= compound_ref_rt_min) \
@@ -163,6 +161,9 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
 
         avg_mz_measured = np.mean(avg_mz_measured)
         avg_rt_measured = np.mean(avg_rt_measured)
+        
+        delta_mz = abs(mz_theoretical - avg_mz_measured)
+        delta_ppm = delta_mz / mz_theoretical * 1e6
 
         final_df = final_df.append({'index':compound_idx}, ignore_index=True)
         final_df.loc[compound_idx, 'identified_metabolite'] = ""
@@ -174,8 +175,14 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
             final_df.loc[compound_idx, 'label'] = cid_label
         
         overlapping_compounds = []
+        cpd_labels = []
         inchi_key_map = {}
-
+        for compound_iterator in range(len(compound_names)):
+            if use_labels:
+                cpd_labels.append(metatlas_dataset[0][compound_iterator]['identification'].name)
+            else:
+                cpd_labels.append(metatlas_dataset[0][compound_iterator]['identification'].compound[0].name)
+        
         if(len(cid.compound) != 0):
             #Loop through compounds to identify overlapping compounds
             for compound_iterator in range(len(compound_names)):
@@ -197,13 +204,23 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
                     if ((cpd_iter_mz-0.005 <= mz_theoretical <= cpd_iter_mz+0.005) or (cpd_iter_mass-0.005 <= cid_mass <= cpd_iter_mass+0.005)) and \
                             ((cpd_iter_rt_min <= cid_rt_min <=cpd_iter_rt_max) or (cpd_iter_rt_min <= cid_rt_max <= cpd_iter_rt_max) or \
                             (cid_rt_min <= cpd_iter_rt_min <= cid_rt_max) or (cid_rt_min <= cpd_iter_rt_max <= cid_rt_max)):
-                        overlapping_compounds.append(cpd_iter_label)
-                        inchi_key_map[cpd_iter_label] = cpd_iter_id.compound[0].inchi_key
+                        if cpd_labels.count(cpd_iter_label)>1:
+                            overlapping_compounds.append(cpd_iter_label +" "+ cpd_iter_id.mz_references[0].adduct)
+                            inchi_key_map[cpd_iter_label+" "+ cpd_iter_id.mz_references[0].adduct] = cpd_iter_id.compound[0].inchi_key
+                        else:
+                            overlapping_compounds.append(cpd_iter_label)
+                            inchi_key_map[cpd_iter_label] = cpd_iter_id.compound[0].inchi_key
 
         if len(overlapping_compounds) > 0:
-            overlapping_compounds.append(cid_label)
+            if cpd_labels.count(cid_label)>1:
+                overlapping_compounds.append(cid_label+" "+cid.mz_references[0].adduct)
+            else:
+                overlapping_compounds.append(cid_label)
             if len(cid.compound) > 0:
-                inchi_key_map[cid_label] = cid.compound[0].inchi_key
+                if cpd_labels.count(cid_label)>1:
+                    inchi_key_map[cid_label+" "+cid.mz_references[0].adduct] = cid.compound[0].inchi_key
+                else:
+                    inchi_key_map[cid_label] = cid.compound[0].inchi_key
             else:
                 inchi_key_map[cid_label] = ""
             final_df.loc[compound_idx, 'overlapping_compound'] = "//".join(cpd for cpd in sorted(overlapping_compounds, key=str))
@@ -221,9 +238,36 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
             final_df.loc[compound_idx, 'polarity'] = cid.mz_references[0].detected_polarity
             final_df.loc[compound_idx, 'exact_mass'] = cid.compound[0].mono_isotopic_molecular_weight
             final_df.loc[compound_idx, 'inchi_key'] = cid.compound[0].inchi_key
-        final_df.loc[compound_idx, 'msms_quality'] = ""
-        final_df.loc[compound_idx, 'mz_quality'] = ""
-        final_df.loc[compound_idx, 'rt_quality'] = ""
+        
+        if file_idxs != []:
+            if len(mz_sample_matches) == 1:
+                final_df.loc[compound_idx, 'msms_quality'] = 0
+            elif scores[0] >= 0.8:
+                final_df.loc[compound_idx, 'msms_quality'] = 1
+            else:
+                final_df.loc[compound_idx, 'msms_quality'] = ""
+        else:
+            final_df.loc[compound_idx, 'msms_quality'] = 0
+        
+        if delta_ppm <= 5 or delta_mz <= 0.001:
+            final_df.loc[compound_idx, 'mz_quality'] = 1
+        elif delta_ppm >= 5 and delta_ppm <= 10 and delta_mz > 0.001:
+            final_df.loc[compound_idx, 'mz_quality'] = 0.5
+        elif delta_ppm > 10:
+            final_df.loc[compound_idx, 'mz_quality'] = 0
+        else:
+            final_df.loc[compound_idx, 'mz_quality'] = ""
+        
+        rt_error = abs(cid.rt_references[0].rt_peak - avg_rt_measured)
+        if rt_error <= 0.5:
+            final_df.loc[compound_idx, 'rt_quality'] = 1
+        elif rt_error <= 2:
+            final_df.loc[compound_idx, 'rt_quality'] = 0.5
+        elif rt_error > 2:
+            final_df.loc[compound_idx, 'rt_quality'] = 0
+        else:
+            final_df.loc[compound_idx, 'rt_quality'] = ""
+        
         final_df.loc[compound_idx, 'total_score'] = ""
         final_df.loc[compound_idx, 'msi_level'] = ""
         final_df.loc[compound_idx, 'isomer_details'] = ""
@@ -258,8 +302,8 @@ def make_stats_table(input_fname = '', input_dataset = [], msms_hits_df = None,
         final_df.loc[compound_idx, 'mz_adduct'] = cid.mz_references[0].adduct
         final_df.loc[compound_idx, 'mz_theoretical'] = float("%.4f" % mz_theoretical)
         final_df.loc[compound_idx, 'mz_measured'] = float("%.4f" % avg_mz_measured)
-        final_df.loc[compound_idx, 'mz_error'] = float("%.4f" % abs(mz_theoretical - avg_mz_measured))
-        final_df.loc[compound_idx, 'mz_ppmerror'] = float("%.4f" % (abs(mz_theoretical - avg_mz_measured) / mz_theoretical * 1e6))
+        final_df.loc[compound_idx, 'mz_error'] = float("%.4f" % delta_mz)
+        final_df.loc[compound_idx, 'mz_ppmerror'] = float("%.4f" % delta_ppm)
         final_df.loc[compound_idx, 'rt_min'] = float("%.2f" % compound_ref_rt_min)
         final_df.loc[compound_idx, 'rt_max'] = float("%.2f" % compound_ref_rt_max)
         final_df.loc[compound_idx, 'rt_theoretical'] = float("%.2f" % cid.rt_references[0].rt_peak)
